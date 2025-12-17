@@ -1,0 +1,194 @@
+import requests
+import time
+import os
+
+def generate_video_runway(prompt, output_path="generated_ad.mp4"):
+    """
+    Note: Runway ML offers free trials but requires API key
+    Sign up at https://runwayml.com/
+    """
+    API_KEY = "YOUR_RUNWAY_API_KEY"
+    
+    headers = {
+        "Authorization": f"Bearer {API_KEY}",
+        "Content-Type": "application/json"
+    }
+    
+    payload = {
+        "prompt": prompt,
+        "duration": 5  # seconds
+    }
+    
+    try:
+        response = requests.post(
+            "https://api.runwayml.com/v1/generate",
+            headers=headers,
+            json=payload
+        )
+        # Implementation depends on Runway's actual API
+        print("Video generation initiated...")
+    except Exception as e:
+        print(f"Error: {e}")
+
+def generate_video_replicate(prompt, output_path="generated_ad.mp4"):
+    """
+    Generate video using Replicate API (free tier available)
+    Sign up at https://replicate.com/ for free API token
+    Models: stability-ai/stable-video-diffusion or zeroscope
+    """
+    API_KEY = "YOUR_REPLICATE_API_TOKEN"
+    
+    headers = {
+        "Authorization": f"Token {API_KEY}",
+        "Content-Type": "application/json"
+    }
+    
+    # Using Zeroscope v2 XL model (free tier available)
+    payload = {
+        "version": "9f747673945c62801b13b84701c783929c0ee784e4748ec062204894dda1a351",
+        "input": {
+            "prompt": prompt,
+            "num_frames": 24,
+            "fps": 8
+        }
+    }
+    
+    try:
+        print("Starting video generation...")
+        response = requests.post(
+            "https://api.replicate.com/v1/predictions",
+            headers=headers,
+            json=payload
+        )
+        response.raise_for_status()
+        prediction = response.json()
+        prediction_id = prediction["id"]
+        
+        # Poll for completion
+        while True:
+            result = requests.get(
+                f"https://api.replicate.com/v1/predictions/{prediction_id}",
+                headers=headers
+            )
+            result_data = result.json()
+            
+            status = result_data["status"]
+            print(f"Status: {status}")
+            
+            if status == "succeeded":
+                video_url = result_data["output"]
+                # Download video
+                video_response = requests.get(video_url)
+                with open(output_path, "wb") as f:
+                    f.write(video_response.content)
+                print(f"Video saved to: {output_path}")
+                return output_path
+            elif status == "failed":
+                print("Video generation failed")
+                return None
+            
+            time.sleep(5)
+            
+    except Exception as e:
+        print(f"Error generating video: {e}")
+        return None
+
+def generate_video_huggingface(prompt, output_path="generated_ad.mp4"):
+    """
+    Generate video using Hugging Face Inference API
+    Free tier available at https://huggingface.co/
+    Using text-to-video models
+    """
+    API_KEY = "YOUR_HUGGINGFACE_API_KEY"
+    # Using ModelScope text-to-video model
+    API_URL = "https://api-inference.huggingface.co/models/damo-vilab/text-to-video-ms-1.7b"
+    
+    headers = {"Authorization": f"Bearer {API_KEY}"}
+    
+    try:
+        print("Generating video...")
+        response = requests.post(
+            API_URL,
+            headers=headers,
+            json={"inputs": prompt}
+        )
+        response.raise_for_status()
+        
+        with open(output_path, "wb") as f:
+            f.write(response.content)
+        print(f"Video saved to: {output_path}")
+        return output_path
+        
+    except Exception as e:
+        print(f"Error generating video: {e}")
+        return None
+
+def create_video_from_images(images_folder="frames", output_path="generated_ad.mp4"):
+    """
+    Alternative: Create video from generated images using OpenCV
+    This is a workaround for free video generation
+    """
+    try:
+        import cv2
+        import glob
+        
+        images = sorted(glob.glob(f"{images_folder}/*.jpg"))
+        
+        if not images:
+            print("No images found in folder")
+            return None
+        
+        # Read first image to get dimensions
+        frame = cv2.imread(images[0])
+        height, width, layers = frame.shape
+        
+        # Create video writer
+        fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+        video = cv2.VideoWriter(output_path, fourcc, 1, (width, height))
+        
+        for image in images:
+            video.write(cv2.imread(image))
+        
+        video.release()
+        print(f"Video created from images: {output_path}")
+        return output_path
+        
+    except ImportError:
+        print("OpenCV not installed. Install with: pip install opencv-python")
+        return None
+    except Exception as e:
+        print(f"Error creating video: {e}")
+        return None
+
+if __name__ == "__main__":
+    # Read prompt from file (generated by promptGenerator.py)
+    try:
+        with open("generated_prompt.txt", "r") as f:
+            prompt = f.read().strip()
+        print("Using prompt from file:")
+    except FileNotFoundError:
+        # Use default prompt
+        prompt = "A cinematic advertisement showing organic tea leaves being gently poured into a ceramic teapot, steam rising elegantly, morning sunlight filtering through a window, slow motion, professional product photography style"
+        print("Using default prompt:")
+    
+    print(prompt)
+    print("\n" + "="*50 + "\n")
+    
+    # Choose your preferred method:
+    
+    # Option 1: Replicate API (Recommended - has free tier)
+    print("Note: You need to sign up at https://replicate.com/ for a free API token")
+    print("Then replace 'YOUR_REPLICATE_API_TOKEN' in the code\n")
+    # generate_video_replicate(prompt)
+    
+    # Option 2: Hugging Face (Free tier available)
+    print("Or sign up at https://huggingface.co/ for a free API key")
+    print("Then replace 'YOUR_HUGGINGFACE_API_KEY' in the code\n")
+    # generate_video_huggingface(prompt)
+    
+    # Option 3: Create video from multiple images (No API needed)
+    print("Alternative: Generate multiple images and combine them into a video")
+    print("This method is completely free and doesn't require any API keys")
+    # create_video_from_images()
+    
+    print("\nUncomment your preferred method in the code to generate videos!")
